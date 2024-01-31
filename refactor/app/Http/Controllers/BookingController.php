@@ -2,6 +2,7 @@
 
 namespace DTApi\Http\Controllers;
 
+use App\Http\Requests\BookingRequest;
 use DTApi\Models\Job;
 use DTApi\Http\Requests;
 use DTApi\Models\Distance;
@@ -35,13 +36,13 @@ class BookingController extends Controller
      */
     public function index(Request $request)
     {
-        if($user_id = $request->get('user_id')) {
-
+        if ($user_id = $request->get('user_id')) {
             $response = $this->repository->getUsersJobs($user_id);
-
         }
-        elseif($request->__authenticatedUser->user_type == env('ADMIN_ROLE_ID') || $request->__authenticatedUser->user_type == env('SUPERADMIN_ROLE_ID'))
-        {
+        elseif(
+            $request->__authenticatedUser->user_type == config('roles.admin')
+            || $request->__authenticatedUser->user_type == config('roles.super_admin')
+        ) {
             $response = $this->repository->getAll($request);
         }
 
@@ -54,7 +55,12 @@ class BookingController extends Controller
      */
     public function show($id)
     {
-        $job = $this->repository->with('translatorJobRel.user')->find($id);
+        $job = $this->repository->with(['translatorJobRel.user' => function($q){
+            $q->select(
+                // here only selected fields should be mentioned
+                // which we need to display on details page.
+            );
+        }])->find($id);
 
         return response($job);
     }
@@ -63,9 +69,11 @@ class BookingController extends Controller
      * @param Request $request
      * @return mixed
      */
-    public function store(Request $request)
+    public function store(BookingRequest $request)
     {
-        $data = $request->all();
+        $data = $request->only([
+            //mention only those fields which we need to post
+        ]);
 
         $response = $this->repository->store($request->__authenticatedUser, $data);
 
@@ -78,11 +86,15 @@ class BookingController extends Controller
      * @param Request $request
      * @return mixed
      */
-    public function update($id, Request $request)
+    public function update($id, BookingRequest $request)
     {
-        $data = $request->all();
+        // Just like BookingRequest all other methods receiving request
+        // must receive custom Request file to add a layer of validation
+        $data = $request->only([
+            // again mention only necessary form field names
+        ]);
         $cuser = $request->__authenticatedUser;
-        $response = $this->repository->updateJob($id, array_except($data, ['_token', 'submit']), $cuser);
+        $response = $this->repository->updateJob($id, $data, $cuser);
 
         return response($response);
     }
@@ -94,7 +106,10 @@ class BookingController extends Controller
     public function immediateJobEmail(Request $request)
     {
         $adminSenderEmail = config('app.adminemail');
-        $data = $request->all();
+        $data = $request->only([
+            'user_type', 'user_email_job_id', 'user_email',
+            'reference', 'address', 'instructions', 'town'
+        ]);
 
         $response = $this->repository->storeJobEmail($data);
 
